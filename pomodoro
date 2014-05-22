@@ -1,0 +1,290 @@
+#/bin/bash
+
+function genGraph {
+    FILES=$(ls -r ~/.finishedWork)
+    FILES="../.completedTasks $FILES"
+    TEMP=$(mktemp -t chart.XXXXX)    
+
+    cat > $TEMP <<EOF
+    <html>
+      <head>
+        <!--Load the AJAX API-->
+        <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+        <script type="text/javascript">
+
+          // Load the Visualization API and the piechart package.
+          google.load('visualization', '1.0', {'packages':['corechart']});
+
+          // Set a callback to run when the Google Visualization API is loaded.
+          google.setOnLoadCallback(drawchartCallback);
+
+          function drawText(texto, dive) {
+            var div = document.createElement('div');
+            dive.appendChild(div);
+            div.innerHTML=texto;
+            div.style.fontSize='10';
+            div.style.width='400';
+            div.style.align='center';
+          }
+
+          function drawchartCallback() {
+
+            var ddd;
+
+            // Set chart options
+            var options = {'title':'Your Daily Progress',
+                           'width':800,
+                           'height':300};
+            var options2 = {'title':'Your Daily Time',
+                           'isStacked': true,
+                           'width':800,
+                           'height':300};
+
+            // Instantiate and draw our chart, passing in some options.
+            var div = document.createElement('div');
+            document.getElementById('chart_div').appendChild(div);
+            var chart = new google.visualization.ColumnChart(div);
+            var marr=[['Day', 'Pomodoro', 'Breaks', 'Long Breaks', 'Uncompleted Tasks']];
+
+            //time chart
+            var div2 = document.createElement('div');
+            document.getElementById('chart_div').appendChild(div2);
+            var chart2 = new google.visualization.ColumnChart(div2);
+            var marr2=[['Day', 'Pomodoro', 'Breaks']];
+EOF
+
+    ##########################################################################
+    for FILEX in $FILES
+    do
+        FILE=~/.finishedWork/$FILEX
+        BREAKS=$(cat $FILE | egrep "^COMPLETED_BREAK" | wc -l | cut -d" " -f 1)
+        LONG_BREAKS=$(cat $FILE | egrep "^COMPLETED_LONG_BREAK" | wc -l | cut -d" " -f 1)
+        UNCOMPLETED_TASKS=$(cat $FILE | egrep "^UNCOMPLETED_TASK" | wc -l | cut -d" " -f 1)
+        REST=$(($BREAKS*5 + $LONG_BREAKS*15))
+        TASKS=$(cat $FILE | egrep "^COMPLETED_TASK" | wc -l | cut -d" " -f 1)
+        MINUTES=$(($TASKS*25))
+
+        REST_PERCENT=$((($REST*100)/510))
+        REAL_PERCENT=$((($MINUTES*100)/510))
+        REMANTING_PERCENT=$((100-$REST_PERCENT-$REAL_PERCENT))
+
+        NOTAS=$(cat $FILE | grep "^PERSONAL_NOTE " | cut -c14-99999 | sed ':a;N;$!ba;s/\n/\<br\> /g')
+
+        TASKS_TIME=$(($TASKS * 25))
+        TASKS_HOUR=$(($TASKS_TIME / 6))
+        BREAK_TIME=$(($BREAKS*5 + $LONG_BREAKS*15))
+        BREAK_HOUR=$(($BREAK_TIME / 6))
+
+        cat >>$TEMP <<EOF
+            ddd = document.createElement('div');
+            ddd.style.cssFloat='left';
+            ddd.style.border="thin solid black";
+            ddd.style.height=350;
+            ddd.style.margin='2px';
+            ddd.style.verticalAlign='middle';
+            document.getElementById('chart_div').appendChild(ddd);
+EOF
+
+        if [ ! -z "$NOTAS" ]
+          then
+            echo "oi" >/dev/null
+        cat >>$TEMP <<EOF
+            drawText('$NOTAS', ddd);
+EOF
+ 
+        fi
+
+        cat >>$TEMP <<EOF 
+            drawChart('$FILEX', $REAL_PERCENT, $REST_PERCENT, $REMANTING_PERCENT, ddd);
+            marr.push(['$FILEX', $TASKS, $BREAKS, $LONG_BREAKS, $UNCOMPLETED_TASKS]);
+            marr2.push(['$FILEX', $TASKS_HOUR / 10.0, $BREAK_HOUR / 10.0]);
+
+EOF
+    done
+    ###########################################################################
+ 
+    cat >> $TEMP <<EOF
+
+            var data = google.visualization.arrayToDataTable(marr);
+            chart.draw(data, options);
+
+            var data2 = google.visualization.arrayToDataTable(marr2);
+            chart2.draw(data2, options2);
+            
+
+          }
+
+          function drawChart(dia, pomodoro, pausa, faltando, dive) {
+
+            // Create the data table.
+            var data = new google.visualization.DataTable();
+            data.addColumn('string', 'Title');
+            data.addColumn('number', 'Value');
+            data.addRows([
+              ['Pomodoro', pomodoro],
+              ['Breaks', pausa],
+              ['Nontracked time', faltando]
+            ]);
+
+            // Set chart options
+            var options = {'title':dia,
+                           'width':400,
+                           'height':300};
+
+            // Instantiate and draw our chart, passing in some options.
+            var div = document.createElement('div');
+            dive.appendChild(div);
+            var chart = new google.visualization.PieChart(div);
+            chart.draw(data, options);
+            chart.width="405px";
+            chart.float="left";
+          }
+        </script>
+      </head>
+
+      <body>
+        <!--Div that will hold the pie chart-->
+        <div id="chart_div" width="900"></div>
+      </body>
+    </html>
+EOF
+    
+    firefox $TEMP
+}
+
+function displayDay {
+    FILE=~/.completedTasks
+    if [ ! -z $1 ]
+    then
+        FILE=~/.finishedWork/$1
+    fi
+    if [ ! -e $FILE ]
+    then
+        echo "Não encontrado..."
+        return
+    fi
+    BREAKS=$(cat $FILE | egrep "^COMPLETED_BREAK" | wc -l | cut -d" " -f 1)
+    LONG_BREAKS=$(cat $FILE | egrep "^COMPLETED_LONG_BREAK" | wc -l | cut -d" " -f 1)
+    REST=$(($BREAKS*5 + $LONG_BREAKS*15))
+    REST_HOURS=$(($REST/60))
+    TASKS=$(cat $FILE | egrep "^COMPLETED_TASK" | wc -l | cut -d" " -f 1)
+    UNCOMPLETED=$(cat $FILE | egrep "^UNCOMPLETED_TASK" | wc -l | cut -d" " -f 1)
+    MINUTES=$(($TASKS*25))
+    HOURS=$(($MINUTES/60))
+
+    UTIL=$(($REST+$MINUTES))
+    UTIL_PERCENT=$((($UTIL*100)/510))
+    REAL_PERCENT=$((($MINUTES*100)/510))
+
+    echo " - Today you completed" $TASKS "(" $MINUTES "minutos ou" $HOURS "horas)" "tasks"
+    echo " - Today you rested for $BREAKS breaks and $LONG_BREAKS long breaks... this is $REST minutes or $REST_HOURS hours" 
+    echo " - Today you were unable to complete $UNCOMPLETED tasks"
+    echo " - Today you were $UTIL minutes useful, this is $UTIL_PERCENT % of the time"
+    echo "                 ...but you really worked $REAL_PERCENT % of the time"
+    echo " "
+    cat $FILE | grep "^PERSONAL_NOTE " | cut -c14-99999
+}
+
+PUT(){ echo -en "\033[${1};${2}H";}
+DRAW(){ echo -en "\033%";echo -en "\033(0";}
+WRITE(){ echo -en "\033(B";}
+HIDECURSOR(){ echo -en "\033[?25l";}
+NORM(){ echo -en "\033[?12l\033[?25h";}
+function showBar {
+    percDone=$(echo 'scale=2;'$1/$2*100 | bc)
+    halfDone=$(echo $percDone/2 | bc) #I prefer a half sized bar graph 
+    barLen=$(echo ${percDone%'.00'})
+    halfDone=`expr $halfDone + 6`
+    tput bold
+    PUT 7 28; printf "%4.4s  " $barLen%     #Print the percentage
+    PUT 5 $halfDone;  echo -e "\033[7m \033[0m" #Draw the bar
+    tput sgr0 
+}
+
+function pomodorate {
+    clear
+    HIDECURSOR
+    echo -e ""
+    echo -e "                   Running $2"
+    echo -e ""
+    DRAW
+    echo -e "  lqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk"
+    echo -e "    x                                                   x"
+    echo -e "    mqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj"
+    WRITE
+    for (( i=0; i<=$1; i++ ))
+      do
+        showBar $i $1  #Call bar drawing function "showBar"
+        sleep 1
+      done
+    PUT 10 12
+    echo -e ""
+    NORM
+}
+
+AGORA=$(date +"%R")
+FPARAM=$1
+SPARAM=$2
+
+function stop {
+    if [ "$FPARAM" == "work" ]
+      then
+        AGORAS=$(date +"%R")
+        echo "UNCOMPLETED_TASK $AGORA $AGORAS $SPARAM" >>~/.completedTasks
+    fi
+
+    PUT 10 12 
+    echo -e ""
+    NORM
+    exit 1
+}
+
+trap stop SIGINT SIGTERM
+
+case $1 in
+    work)
+    if [ -z "$2" ]; then
+        echo "Please say what you're going to do: \"$0 work my job is...\""
+        exit
+    fi
+    notify-send "begin work" && pomodorate 1500 "Pomodoro" && notify-send --urgency=critical "# --- Coffe Break! ---#" && echo "COMPLETED_TASK $AGORA $2" >>~/.completedTasks
+    ;;
+
+    break)
+    notify-send "give a short break" && pomodorate 300 "Break" && notify-send --urgency=critical "#--- back to work! ---#" && echo "COMPLETED_BREAK $AGORA">>~/.completedTasks
+    ;;
+
+    long-break)
+    notify-send "give a long break" && pomodorate 900 "Long Break" && notify-send --urgency=critical "#--- back to work! ---#" && echo "COMPLETED_LONG_BREAK $AGORA">>~/.completedTasks
+    ;;
+
+    interrupt)
+    echo "UNCOMPLETED_TASK $AGORA $2" >>~/.completedTasks
+    ;;
+
+    finish-day)
+    displayDay
+    if [ ! -d ~/.finishedWork ]; then
+        rm -rf ~/.finishedWork
+        mkdir ~/.finishedWork
+    fi
+    mv ~/.completedTasks ~/.finishedWork/$(date +"%y%m%d")
+    ;;
+
+    day)
+    displayDay $2
+    ;;
+
+    graph)
+    genGraph
+    ;;
+
+    note|log)
+    echo "PERSONAL_NOTE $AGORA $2" >>~/.completedTasks
+    ;;
+
+    *)
+    echo "$0 <work message> <break> <long-break> <finish-day> <day [date]> <interrupt message> <graph> <note|log message>"
+    ;;
+esac
+
